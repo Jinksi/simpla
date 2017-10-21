@@ -12,12 +12,14 @@ export default class GitHub {
     data = 'data',
     uploads = 'uploads',
     branch = 'master',
-    credentials = null
+    credentials = null,
+    commitMethod = 'merge'
   }) {
     this.repo = repo;
     this.branch = branch;
     this.paths = { data, uploads };
     this.credentials = credentials;
+    this.commitMethod = commitMethod;
   }
 
   /**
@@ -219,6 +221,27 @@ class Transaction extends GitHub {
       });
     };
 
+    const createPullRequest = () => {
+      return this._request('pulls', {
+        method: 'POST',
+        body: {
+          title: 'PR editing branch',
+          head: this.branch,
+          base: this.from
+        }
+      });
+    };
+
+    const mergePullRequest = (pullRequest) => {
+      return this._request(`pulls/${pullRequest.number}/merge`, {
+        method: 'PUT',
+        body: {
+          commit_title: 'Merge editing branch PR',
+          merge_method: 'squash'
+        }
+      });
+    };
+
     const deleteOwnBranch = () => {
       return this._request(`git/refs/heads/${this.branch}`, {
         method: 'DELETE'
@@ -226,7 +249,17 @@ class Transaction extends GitHub {
     };
 
     return this._enqueue(() => {
-      return mergeIntoPreviousBranch().then(deleteOwnBranch).then(noop);
+      if (this.commitMethod === 'pr') {
+        return createPullRequest()
+          .then(mergePullRequest)
+          .then(deleteOwnBranch)
+          .then(noop);
+      }
+      return createPullRequest()
+        .then(mergeIntoPreviousBranch)
+        .then(deleteOwnBranch)
+        .then(noop);
+
     });
   }
 }
